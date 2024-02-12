@@ -1,41 +1,39 @@
-import type { MetaFunction } from "@remix-run/node";
+import type { LoaderFunction, MetaFunction } from "@remix-run/node"
+import { Link, json, useLoaderData } from "@remix-run/react"
+
+import { getPosts } from "~/models/post.server"
+
+type LoaderData = {
+	posts: Awaited<ReturnType<typeof getPosts>>
+}
 
 export const meta: MetaFunction = () => {
-  return [
-    { title: "New Remix App" },
-    { name: "description", content: "Welcome to Remix!" },
-  ];
-};
+	return [
+		{
+			name: "description",
+			content: "A list of posts"
+		},
+		{ title: "Posts" }
+	]
+}
 
-export default function Index() {
-  return (
-    <div style={{ fontFamily: "system-ui, sans-serif", lineHeight: "1.8" }}>
-      <h1>Welcome to Remix</h1>
-      <ul>
-        <li>
-          <a
-            target="_blank"
-            href="https://remix.run/tutorials/blog"
-            rel="noreferrer"
-          >
-            15m Quickstart Blog Tutorial
-          </a>
-        </li>
-        <li>
-          <a
-            target="_blank"
-            href="https://remix.run/tutorials/jokes"
-            rel="noreferrer"
-          >
-            Deep Dive Jokes App Tutorial
-          </a>
-        </li>
-        <li>
-          <a target="_blank" href="https://remix.run/docs" rel="noreferrer">
-            Remix Docs
-          </a>
-        </li>
-      </ul>
-    </div>
-  );
+export const loader: LoaderFunction = async () => {
+	const posts = await getPosts()
+	return json<LoaderData>({ posts })
+}
+
+export default function App() {
+	const { posts } = useLoaderData() as LoaderData
+	return (
+		<div>
+			<h1>Posts</h1>
+			<ul>
+				{posts.map((post, index) => (
+					<li key={index}>
+						<Link to={post.url}>{post.title}</Link>
+					</li>
+				))}
+			</ul>
+		</div>
+	)
 }
