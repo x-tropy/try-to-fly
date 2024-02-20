@@ -1,49 +1,63 @@
-# syntax = docker/dockerfile:1
-
-# Adjust NODE_VERSION as desired
-ARG NODE_VERSION=18.17.1
-FROM node:${NODE_VERSION}-slim as base
-
-LABEL fly_launch_runtime="Remix"
-
-# Remix app lives here
-WORKDIR /app
-
-# Set production environment
-ENV NODE_ENV="production"
-
-# Install pnpm
-ARG PNPM_VERSION=8.15.1
-RUN npm install -g pnpm@$PNPM_VERSION
+# 🍔 Four layers are used to build the image
 
 
-# Throw-away build stage to reduce size of final image
-FROM base as build
-
-# Install packages needed to build node modules
-RUN apt-get update -qq && \
-    apt-get install --no-install-recommends -y build-essential node-gyp pkg-config python-is-python3
-
-# Install node modules
-COPY --link package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile --prod=false
-
-# Copy application code
-COPY --link . .
-
-# Build application
-RUN pnpm run build
-
-# Remove development dependencies
-RUN pnpm prune --prod
+# ----------------------------------------
+# 💿 Layer 1: base
+FROM node:hydrogen-alpine AS base
+# RUN apt-get update && apt-get install -y sqlite3 
 
 
-# Final stage for app image
-FROM base
+# ----------------------------------------
+# 💿 Layer 2.1: deps
+FROM base AS deps
+WORKDIR /dockerapp
+ADD package.json .
+RUN npm install
 
-# Copy built application
-COPY --from=build /app /app
+# 💿 Layer 2.2: deps-production
+FROM base AS deps-production
+WORKDIR /dockerapp
+ADD package.json .
+COPY --from=deps /dockerapp/node_modules ./node_modules
+RUN npm prune --omit=dev
 
-# Start the server by default, this can be overwritten at runtime
-EXPOSE 3000
-CMD [ "pnpm", "run", "start" ]
+
+# ----------------------------------------
+# 💿 Layer 3: build
+FROM base AS build
+
+# 🌒 Preparing required files
+WORKDIR /dockerapp
+COPY --from=deps /dockerapp/node_modules ./node_modules
+COPY . .
+
+# 🌓 Setting up DB
+ENV DATABASE_URL="file:../data/sqlite.db"
+RUN npx prisma migrate deploy && \
+npx prisma generate && \
+npx prisma db seed
+
+# 🌔 Building the app
+RUN npm run build
+
+
+# ----------------------------------------
+# 💿 Layer 4: final
+FROM base AS final
+WORKDIR /dockerapp
+COPY --from=deps-production /dockerapp/node_modules ./node_modules
+COPY --from=build /dockerapp/node_modules/.prisma ./node_modules/.prisma
+COPY --from=build /dockerapp/prisma ./prisma
+COPY --from=build /dockerapp/data ./data
+COPY --from=build /dockerapp/build ./build
+COPY --from=build /dockerapp/package.json ./package.json
+COPY --from=build /dockerapp/public ./public
+
+# 💡 Visit sqlite DB
+ENV DATABASE_URL="file:../data/sqlite.db"
+# RUN echo "#!/bin/sh\nset -x\nsqlite3 \$DATABASE_URL" > /usr/local/bin/database-cli && chmod +x /usr/local/bin/database-cli
+
+ENV NODE_ENV=production
+ENV PORT=8090
+USER node
+CMD npm run start

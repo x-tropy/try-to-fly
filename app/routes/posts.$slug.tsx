@@ -10,6 +10,7 @@ type LoaderData = {
 	html: string
 }
 
+// This is the loader function for this route. It runs on the server and
 export const loader: LoaderFunction = async ({ params }) => {
 	const { slug } = params
 	invariant(slug, "No slug provided")

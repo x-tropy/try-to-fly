@@ -30,7 +30,9 @@ export default function App() {
 			<ul>
 				{posts.map((post, index) => (
 					<li key={index}>
-						<Link to={post.url}>{post.id + post.title}</Link>
+						<Link to={post.url}>
+							{post.id} {" 💡 "} {post.title}
+						</Link>
 					</li>
 				))}
 			</ul>
